@@ -1,0 +1,149 @@
+---
+title: "a2t2"
+author: "Casey O'Hara"
+date: "1/28/2021"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    number_sections: true
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(ggfortify) # for PCA
+library(GGally)
+library(jtools)
+
+```
+
+# intro
+
+In a separate .Rmd saved as a2_task2_firstname_lastname.Rmd, using the Florida palmetto data (palmetto.csv), use binary logistic regression to test feasibility of using variables plant height (height), canopy length (length), canopy width (width), and number of green leaves (green_lvs) to classify whether a palmetto is species _Serenoa repens_ or _Sabal etonia._ Use code folding and hide all messages & warnings in your knitted HTML. 
+
+Data source: Abrahamson, W.G. 2019. Survival, growth and biomass estimates of two dominant palmetto species of south-central Florida from 1981 - 2017, ongoing at 5-year intervals ver 1. Environmental Data Initiative. https://doi.org/10.6073/pasta/f2f96ec76fbbd4b9db431c79a770c4d5
+
+More information and metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=edi.317.1
+
+For Task 2, produce a final, professionally formatted knitted HTML that contains the following: 
+
+## Data vis
+
+A section containing 2 - 3 finalized data visualizations (with figure captions) in which you explore differences in height, canopy length, canopy width, and green leaves for the two species. Add a figure caption to each. Below each data visualization, add a short (1 sentence) statement with a takeaway from the visualization.
+
+```{r}
+palmetto <- read_csv(here('palmetto.csv'), col_types = cols(.default = 'c')) %>%
+  transmute(year = as.integer(year),
+            species,
+            height    = as.numeric(height),
+            width     = as.numeric(width),
+            length    = as.numeric(length),
+            green_lvs = as.numeric(green_lvs)) %>%
+  mutate(species = ifelse(species == 1, 'Serenoa repens', 'Sabal etonia'),
+         species = factor(species)) %>%
+  drop_na()
+```
+
+```{r}
+palmetto_pca <- palmetto %>%
+  select(height, width, length, green_lvs) %>%
+  scale() %>%
+  prcomp()
+
+palmetto_pca$rotation
+
+autoplot(palmetto_pca, 
+         data = palmetto, colour = 'species',
+         loadings = TRUE, loadings.label = TRUE, 
+         alpha = .25,
+         loadings.label.repel = TRUE,
+         loadings.colour = 'black',
+         loadings.label.colour = 'black') +
+  scale_color_viridis_d() +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(palmetto, aes(x = length, y = green_lvs, color = species)) +
+  geom_point(alpha = .5) +
+  scale_color_viridis_d() +
+  theme_minimal()
+
+ggplot(palmetto, aes(x = length, y = width, color = species)) +
+  geom_point(alpha = .5) +
+  scale_color_viridis_d() +
+  theme_minimal()
+```
+
+```{r}
+palmetto %>% 
+  sample_frac(.05) %>%
+  select(species, height:green_lvs) %>% 
+  ggpairs(aes(color = species))
+```
+
+
+## binary logistic regression
+
+A section in which you perform binary logistic regression using plant height, canopy length, canopy width and green leaves as predictor variables to understand how they relate to probability of a plant being _Serenoa repens_ or _Sabal etonia_ (make sure you understand which species is the first '0' factor level, and which is '1' - you may want to convert to a factor first, then use the levels() function to check). The output should be a finalized table containing the binary logistic regression model results (at least coefficients, standard errors for the coefficients, and information for significance - consider using broom::tidy() to get you most of the way). 
+
+```{r}
+binary_lr <- glm(species ~ height + width + length + green_lvs, data = palmetto, 
+                 family = 'binomial')
+summary(binary_lr)
+
+blr_tidy <- binary_lr %>% broom::tidy()
+
+blr_tidy
+```
+
+
+## evaluate classification
+
+A section that evaluates how successfully this model would "classify" a plant as the correct species, using a 50% cutoff (e.g. if the probability is >=50% that it is species A, then it would be classified as species A). You should use `broom::augment()` to find the probabilities for each plant in the original dataset, then add a column for which species the model (using that 50% cutoff) would classify that plant as using the 4 included predictor variables. The outcome should be a finalized table showing, for each species, how many plants in the original dataset would be correctly classified and how many were incorrectly classified by the model, as well as an additional column with "% correctly classified". Add a table caption above the table. 
+
+
+```{r}
+palmetto_fitted <- binary_lr %>%
+  broom::augment(type.predict = 'response') %>%
+  mutate(spp_pred = ifelse(.fitted > .50, 'Serenoa repens', 'Sabal etonia')) %>%
+  mutate(correct_pred = species == spp_pred)
+
+summary_df <- palmetto_fitted %>%
+  group_by(species) %>%
+  summarize(n_actual = n(),
+            n_pred = sum(correct_pred),
+            pct_pred = 100 * n_pred / n_actual)
+```
+
+```{r}
+ggplot(data = palmetto_fitted, aes(x = green_lvs, y = .fitted)) +
+  geom_point(aes(color = length)) +
+  geom_smooth(aes(color = length), se = FALSE) +
+  labs(x = "green leaves",
+       y = "Probability of outcome 'Serenoa repens'")
+
+effect_plot(binary_lr, 
+            pred = length, 
+            interval = TRUE, 
+            y.label = "Probability of 'Serenoa repens'")
+
+effect_plot(binary_lr, 
+            pred = width, 
+            interval = TRUE, 
+            y.label = "Probability of 'Serenoa repens'")
+
+effect_plot(binary_lr, 
+            pred = height, 
+            interval = TRUE, 
+            y.label = "Probability of 'Serenoa repens'")
+
+effect_plot(binary_lr, 
+            pred = green_lvs, 
+            interval = TRUE, 
+            y.label = "Probability of 'Serenoa repens'")
+```

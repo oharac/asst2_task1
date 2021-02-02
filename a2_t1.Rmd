@@ -1,0 +1,110 @@
+---
+title: "asst 2 task 1"
+author: "Casey O'Hara"
+date: "1/28/2021"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    number_sections: true
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(here)
+library(feasts)
+library(tsibble)
+```
+
+In your collaborative RMarkdown document, your group will explore adult fish passage recorded from 2001-01-01 to 2010-12-31 at the Willamette Falls fish ladder on the Willamette River (Oregon). Data were shared by and accessed from Columbia River DART (Data Access in Real Time).
+
+You should include the following content: 
+
+# Overview {.tabset}
+
+This “Overview” section (above the tabs) should contain, in whatever order you choose: 
+
+* An engaging image (with caption, including photo credit) that is relevant to the dataset
+* A brief summary (3 - 4 sentences) of the dataset, and what is included in this “report”
+* A map of the fish ladder location (you can make this in R on your own, or include an existing map appropriately licensed, with attribution)
+* A professionally formatted data citation
+
+Remember: All code that you used to wrangle the data and prepare the graphs should be available to see if we click on the Code buttons. 
+
+## Original time series 
+
+This “Time series” tab should contain: 
+A finalized, static graph of adult passage for coho, jack coho, and steelhead salmon (you decide if these all occupy the same panel, or if they are in separate panels). Add a figure caption. Replace NA values with zero. 
+2 - 3 bulletpoints summarizing major patterns / notable trends in the salmon passage time series data
+Remember: All code that you used to wrangle the data and prepare the graphs should be available to see if we click on the Code buttons. 
+
+```{r}
+salmon_ts <- read_csv(here('willamette_fish_passage.csv')) %>%
+  janitor::clean_names() %>%
+  select(date, coho, jack_coho, steelhead, chinook, jack_chinook, temp_c) %>%
+  gather(salmon, count, coho:jack_chinook) %>%
+  mutate(date = lubridate::mdy(date),
+         count = ifelse(is.na(count) | count < 0, 0, count)) %>%
+  as_tsibble(index = date, key = salmon)
+
+ggplot(salmon_ts, aes(x = date, y = count)) +
+  theme_minimal() +
+  geom_line(color = 'grey20', size = .2) +
+  facet_wrap(~ salmon, ncol = 1, scales = 'free_y')
+```
+
+## Seasonplots
+
+This “Seasonplots” tab should contain: 
+
+* A finalized seasonplot for each species (coho, jack coho, steelhead). You can either facet, or use patchwork, to make the figure. Add a caption. 
+* Add 2 - 3 bulletpoints summarizing the major trends you see in the seasonplots.
+
+Remember: All code that you used to wrangle the data and prepare the graphs should be available to see if we click on the Code buttons. 
+
+```{r}
+salmon_ts <- read_csv(here('willamette_fish_passage.csv')) %>%
+  janitor::clean_names() %>%
+  select(date, coho, jack_coho, steelhead, chinook, jack_chinook, temp_c) %>%
+  gather(salmon, count, coho:jack_chinook) %>%
+  mutate(date = lubridate::mdy(date),
+         count = ifelse(is.na(count) | count < 0, 0, count)) %>%
+  as_tsibble(index = date, key = salmon)
+
+gg_season(salmon_ts, y = count, pal = hcl.colors(10, rev = TRUE)) +
+  theme_minimal() +
+  facet_wrap(~ salmon, ncol = 1, scales = 'free_y')
+```
+
+## Annual counts by species
+
+This “Summary statistics and analysis” tab should contain: 
+
+* A finalized figure of annual totals for fish passage, for each of the 3 species (coho, jack coho, steelhead). You decide if this is in a single panel, or multiple panels. Add a figure caption. 
+* Add 2 - 3 bulletpoints summarizing major trends you see in the annual totals by species from 2000 - 2010.
+
+Remember: All code that you used to wrangle the data and prepare the graphs should be available to see if we click on the Code buttons. 
+
+```{r}
+salmon_ts <- read_csv(here('willamette_fish_passage.csv')) %>%
+  janitor::clean_names() %>%
+  select(date, coho, jack_coho, steelhead, chinook, jack_chinook, temp_c) %>%
+  gather(salmon, count, coho:jack_chinook) %>%
+  mutate(date = lubridate::mdy(date),
+         count = ifelse(is.na(count) | count < 0, 0, count)) %>%
+  as_tsibble(index = date, key = salmon)
+
+salmon_totals <- salmon_ts %>%
+  group_by_key() %>%
+  index_by(year = ~lubridate::year(.)) %>%
+  summarize(total_count = sum(count))
+
+ggplot(salmon_totals, aes(x = year, y = total_count, fill = year)) +
+  theme_minimal() +
+  geom_col(color = 'grey20', size = .2, show.legend = FALSE) +
+  scale_fill_viridis_c(direction = -1) +
+  scale_x_continuous(breaks = 2001:2010) +
+  facet_wrap(~ salmon, ncol = 1, scales = 'free_y')
+```
